@@ -35,14 +35,14 @@ int main(int argc, const char** argv)
     // Benchmarking GEMM operations
     for (auto& matrix_size : matrix_sizes)
     {
-        benchmark_hgemm(handle, matrix_size.first, matrix_size.second);
+        benchmark_gemm(handle, matrix_size.first, matrix_size.second);
     }
 
     return 0;
 }
 
 // Benchmarking GEMM operations
-void benchmark_hgemm(rocblas_handle handle, int rows, int columns)
+void benchmark_gemm(rocblas_handle handle, int rows, int columns)
 {
     // Print the matrix size
     std::cout << "Benchmarking GEMM operation on " << rows << "x" << columns << " matrix" << std::endl;
@@ -57,8 +57,8 @@ void benchmark_hgemm(rocblas_handle handle, int rows, int columns)
     auto rng = std::default_random_engine(0);
     for (int i = 0; i < rows * columns; i++)
     {
-        A[i] = rng() % 100;
-        B[i] = rng() % 100;
+        A[i] = data_type(rng() % 100);
+        B[i] = data_type(rng() % 100);
     }
 
     // Allocate the matrices on the device
