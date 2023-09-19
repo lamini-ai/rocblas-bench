@@ -1,8 +1,10 @@
 
 #include <iostream>
-#include <rocblas.h>
+#include <rocblas/rocblas.h>
+#include <hip/hip_runtime.h>
 #include <vector>
 #include <random>
+#include <chrono>
 
 void benchmark_gemm(rocblas_handle, int, int);
 
@@ -50,7 +52,7 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     std::vector<float> B(rows * columns);
 
     // Initialize the matrices with random values
-    auto rng = std::default_random_engine(seed=0);
+    auto rng = std::default_random_engine(0);
     for (int i = 0; i < rows * columns; i++)
     {
         A[i] = rng() % 100;
@@ -60,22 +62,22 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     // Allocate the matrices on the device
     float* dA;
     float* dB;
-    rocblas_status status = rocblas_malloc((void**)&dA, rows * columns * sizeof(float));
-    if (status != rocblas_status_success)
+    hipError_t error = hipMalloc((void**)&dA, rows * columns * sizeof(float));
+    if (error != hipSuccess)
     {
         std::cout << "rocBLAS device memory allocation failed for A" << std::endl;
         return;
     }
 
-    status = rocblas_malloc((void**)&dB, rows * columns * sizeof(float));
-    if (status != rocblas_status_success)
+    error = hipMalloc((void**)&dB, rows * columns * sizeof(float));
+    if (error != hipSuccess)
     {
         std::cout << "rocBLAS device memory allocation failed for B" << std::endl;
         return;
     }
 
     // Copy the matrices from the host to the device
-    status = rocblas_set_matrix(rows, columns, sizeof(float), A.data(), rows, dA, rows);
+    rocblas_status status = rocblas_set_matrix(rows, columns, sizeof(float), A.data(), rows, dA, rows);
     if (status != rocblas_status_success)
     {
         std::cout << "rocBLAS copy from host to device failed for A" << std::endl;
@@ -90,8 +92,8 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     }
 
     // Synchronize the device
-    status = rocblas_synchronize(handle);
-    if (status != rocblas_status_success)
+    error = hipDeviceSynchronize();
+    if (error != hipSuccess)
     {
         std::cout << "rocBLAS device synchronization failed" << std::endl;
         return;
@@ -111,7 +113,12 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     }
 
     // Synchronize the device
-    status = rocblas_synchronize(handle);
+    error = hipDeviceSynchronize();
+    if (error != hipSuccess)
+    {
+        std::cout << "rocblas gemm failed" << std::endl;
+        return;
+    }
 
     // Stop the timer
     auto end = std::chrono::high_resolution_clock::now();
@@ -120,11 +127,21 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     std::cout << "Time taken for GEMM operation on " << rows << "x" << columns << " matrix: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
     // Print the TFLOP/s
-    std::cout << "TFLOP/s: " << (2.0 * rows * columns * rows) / (std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() * 1000000) << std::endl;
+    std::cout << "TFLOP/s: " << (2.0 * rows * columns * rows) / (std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() * 1e9) << std::endl;
 
     // Free the device memory
-    rocblas_free(dA);
-    rocblas_free(dB);
+    error = hipFree(dA);
+    if (error != hipSuccess)
+    {
+        std::cout << "rocBLAS free failed" << std::endl;
+        return;
+    }
+    error = hipFree(dB);
+    if (error != hipSuccess)
+    {
+        std::cout << "rocBLAS free failed" << std::endl;
+        return;
+    }
 
 }
 
