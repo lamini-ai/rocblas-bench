@@ -35,21 +35,23 @@ int main(int argc, const char** argv)
     // Benchmarking GEMM operations
     for (auto& matrix_size : matrix_sizes)
     {
-        benchmark_gemm(handle, matrix_size.first, matrix_size.second);
+        benchmark_hgemm(handle, matrix_size.first, matrix_size.second);
     }
 
     return 0;
 }
 
 // Benchmarking GEMM operations
-void benchmark_gemm(rocblas_handle handle, int rows, int columns)
+void benchmark_hgemm(rocblas_handle handle, int rows, int columns)
 {
     // Print the matrix size
     std::cout << "Benchmarking GEMM operation on " << rows << "x" << columns << " matrix" << std::endl;
 
+    typdef rocblas_bfloat16 data_type;
+
     // Allocate the matrices on the host
-    std::vector<float> A(rows * columns);
-    std::vector<float> B(rows * columns);
+    std::vector<data_type> A(rows * columns);
+    std::vector<data_type> B(rows * columns);
 
     // Initialize the matrices with random values
     auto rng = std::default_random_engine(0);
@@ -60,16 +62,16 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     }
 
     // Allocate the matrices on the device
-    float* dA;
-    float* dB;
-    hipError_t error = hipMalloc((void**)&dA, rows * columns * sizeof(float));
+    data_type* dA;
+    data_type* dB;
+    hipError_t error = hipMalloc((void**)&dA, rows * columns * sizeof(data_type));
     if (error != hipSuccess)
     {
         std::cout << "rocBLAS device memory allocation failed for A" << std::endl;
         return;
     }
 
-    error = hipMalloc((void**)&dB, rows * columns * sizeof(float));
+    error = hipMalloc((void**)&dB, rows * columns * sizeof(data_type));
     if (error != hipSuccess)
     {
         std::cout << "rocBLAS device memory allocation failed for B" << std::endl;
@@ -77,14 +79,14 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     }
 
     // Copy the matrices from the host to the device
-    rocblas_status status = rocblas_set_matrix(rows, columns, sizeof(float), A.data(), rows, dA, rows);
+    rocblas_status status = rocblas_set_matrix(rows, columns, sizeof(data_type), A.data(), rows, dA, rows);
     if (status != rocblas_status_success)
     {
         std::cout << "rocBLAS copy from host to device failed for A" << std::endl;
         return;
     }
 
-    status = rocblas_set_matrix(rows, columns, sizeof(float), B.data(), rows, dB, rows);
+    status = rocblas_set_matrix(rows, columns, sizeof(data_type), B.data(), rows, dB, rows);
     if (status != rocblas_status_success)
     {
         std::cout << "rocBLAS copy from host to device failed for B" << std::endl;
@@ -103,8 +105,8 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     auto start = std::chrono::high_resolution_clock::now();
 
     // Perform the GEMM operation on the device
-    float alpha = 1.0f;
-    float beta = 0.0f;
+    data_type alpha = 1.0f;
+    data_type beta = 0.0f;
     status = rocblas_sgemm(handle, rocblas_operation_none, rocblas_operation_none, rows, columns, rows, &alpha, dA, rows, dB, rows, &beta, dB, rows);
     if (status != rocblas_status_success)
     {
