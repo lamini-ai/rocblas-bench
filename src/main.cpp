@@ -41,13 +41,43 @@ int main(int argc, const char** argv)
     return 0;
 }
 
+typedef rocblas_bfloat16 data_type;
+/*
+data_type convert(float v)
+{
+    union conversion
+    {
+    	float f;
+	uint32_t i;
+    };
+
+    conversion c;
+
+    c.f = v;
+
+    uint32_t fltInt32 = c.i;
+    uint16_t fltInt16;
+    
+    fltInt16 = (fltInt32 >> 31) << 5;
+    uint16_t tmp = (fltInt32 >> 23) & 0xff;
+    tmp = (tmp - 0x70) & ((uint16_t)((int32_t)(0x70 - tmp) >> 4) >> 27);
+    fltInt16 = (fltInt16 | tmp) << 10;
+    fltInt16 |= (fltInt32 >> 13) & 0x3ff;
+
+    data_type final_value;
+    final_value.data = fltInt16;
+
+    return final_value;
+}
+*/
+
+data_type convert(float v){ return data_type(v); }
+
 // Benchmarking GEMM operations
 void benchmark_gemm(rocblas_handle handle, int rows, int columns)
 {
     // Print the matrix size
     std::cout << "Benchmarking GEMM operation on " << rows << "x" << columns << " matrix" << std::endl;
-
-    typdef rocblas_bfloat16 data_type;
 
     // Allocate the matrices on the host
     std::vector<data_type> A(rows * columns);
@@ -57,13 +87,14 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     auto rng = std::default_random_engine(0);
     for (int i = 0; i < rows * columns; i++)
     {
-        A[i] = data_type(rng() % 100);
-        B[i] = data_type(rng() % 100);
+        A[i] = convert(float(rng() % 100));
+        B[i] = convert(float(rng() % 100));
     }
 
     // Allocate the matrices on the device
     data_type* dA;
     data_type* dB;
+    data_type* dC;
     hipError_t error = hipMalloc((void**)&dA, rows * columns * sizeof(data_type));
     if (error != hipSuccess)
     {
@@ -75,6 +106,13 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     if (error != hipSuccess)
     {
         std::cout << "rocBLAS device memory allocation failed for B" << std::endl;
+        return;
+    }
+
+    error = hipMalloc((void**)&dC, rows * columns * sizeof(float));
+    if (error != hipSuccess)
+    {
+        std::cout << "rocBLAS device memory allocation failed for C" << std::endl;
         return;
     }
 
@@ -105,15 +143,20 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     auto start = std::chrono::high_resolution_clock::now();
 
     // Perform the GEMM operation on the device
-    data_type alpha = 1.0f;
-    data_type beta = 0.0f;
-    status = rocblas_sgemm(handle, rocblas_operation_none, rocblas_operation_none, rows, columns, rows, &alpha, dA, rows, dB, rows, &beta, dB, rows);
-    if (status != rocblas_status_success)
+    int count = 1;
+    for(int i  = 0; i < count; ++i)
     {
-        std::cout << "rocBLAS GEMM operation failed" << std::endl;
-        return;
-    }
+        data_type alpha = convert(1.0f * i + 1.f);
+        data_type beta = convert(1.0f);
+        status = rocblas_gemm_ex(handle, rocblas_operation_none, rocblas_operation_transpose, rows, columns, rows, &alpha, dA, rocblas_datatype_bf16_r, rows, dB, rocblas_datatype_bf16_r, rows, &beta, dC, rocblas_datatype_f32_r, rows, dC, rocblas_datatype_f32_r, rows, rocblas_datatype_f32_r, rocblas_gemm_algo_standard, 0, 0);
+        if (status != rocblas_status_success)
+        {
+            std::cout << "rocBLAS GEMM operation failed" << std::endl;
+	    std::cout << "Error: " << rocblas_status_to_string(status) << std::endl;
+            return;
+        }
 
+    }
     // Synchronize the device
     error = hipDeviceSynchronize();
     if (error != hipSuccess)
@@ -129,7 +172,7 @@ void benchmark_gemm(rocblas_handle handle, int rows, int columns)
     std::cout << "Time taken for GEMM operation on " << rows << "x" << columns << " matrix: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
 
     // Print the TFLOP/s
-    std::cout << "TFLOP/s: " << (2.0 * rows * columns * rows) / (std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() * 1e9) << std::endl;
+    std::cout << "TFLOP/s: " << (count * 2.0 * rows * columns * rows) / (std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() * 1e9) << std::endl;
 
     // Free the device memory
     error = hipFree(dA);

@@ -16,7 +16,7 @@ LOCAL_DIRECTORY="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd
 mkdir -p $LOCAL_DIRECTORY/../build
 
 # Use LLVM to compile the C++ code
-clang++ -std=c++20 -D__HIP_PLATFORM_AMD__ -I /opt/rocm/include -I/usr/include/c++/11 -I/usr/include/x86_64-linux-gnu/c++/11 -L /usr/lib/gcc/x86_64-linux-gnu/11 -L /opt/rocm/lib  -o $LOCAL_DIRECTORY/../build/rocblas-bench $LOCAL_DIRECTORY/../src/main.cpp -l rocblas -l amdhip64
+clang++ -O2 -D__HIPCC__ -D__HCC__ -std=c++20 -D__HIP_PLATFORM_AMD__ -I /opt/rocm/include -I/usr/include/c++/11 -I/usr/include/x86_64-linux-gnu/c++/11 -L /usr/lib/gcc/x86_64-linux-gnu/11 -L /opt/rocm/lib  -o $LOCAL_DIRECTORY/../build/rocblas-bench $LOCAL_DIRECTORY/../src/main.cpp -l rocblas -l amdhip64
 
 
 
